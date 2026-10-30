@@ -295,7 +295,7 @@
   "bgm": "work/video1/bgm.wav",
   "bgm_volume": 0.35,
   "crop_x": 0.68,
-  "video_top": 450,
+  "video_top": 330,
   "crop_y": 0.0,
   "caption_y": 1250
 }
