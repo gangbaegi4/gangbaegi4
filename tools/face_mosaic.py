@@ -72,25 +72,30 @@ def head_box_from_pose(lm):
     return np.array([cx, cy - size * 0.08, size])
 
 
-def pixelate(frame, cx, cy, size, block=12):
+def pixelate(frame, cx, cy, size, block=12, down=0.55):
+    """머리~목까지만 타원 모양으로 모자이크 (어깨·승모근은 건드리지 않음)."""
     h, w = frame.shape[:2]
-    half = size / 2
-    x1, y1 = int(max(0, cx - half)), int(max(0, cy - half * 1.2))
-    x2, y2 = int(min(w, cx + half)), int(min(h, cy + half * 1.1))
+    rx, ry_up, ry_down = size * 0.5, size * 0.62, size * down
+    x1, y1 = int(max(0, cx - rx)), int(max(0, cy - ry_up))
+    x2, y2 = int(min(w, cx + rx)), int(min(h, cy + ry_down))
     if x2 - x1 < 4 or y2 - y1 < 4:
         return
     roi = frame[y1:y2, x1:x2]
-    bw = max(1, (x2 - x1) // block)
-    bh = max(1, (y2 - y1) // block)
-    small = cv2.resize(roi, (bw, bh), interpolation=cv2.INTER_AREA)
-    frame[y1:y2, x1:x2] = cv2.resize(small, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
+    bw = max(1, int(size / block))
+    small = cv2.resize(roi, (max(1, (x2 - x1) * bw // int(size)), max(1, (y2 - y1) * bw // int(size))),
+                       interpolation=cv2.INTER_AREA)
+    mos = cv2.resize(small, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
+    yy, xx = np.mgrid[y1:y2, x1:x2]
+    ry = np.where(yy < cy, ry_up, ry_down)
+    inside = ((xx - cx) / rx) ** 2 + ((yy - cy) / ry) ** 2 <= 1
+    roi[inside] = mos[inside]
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("input")
     ap.add_argument("-o", "--output", required=True)
-    ap.add_argument("--scale", type=float, default=1.35, help="모자이크 크기 배율 (여유)")
+    ap.add_argument("--scale", type=float, default=1.1, help="모자이크 크기 배율 (여유)")
     ap.add_argument("--track", help="직접 보정한 머리 위치(npy, 프레임별 [x, y, 크기])로 바로 모자이크")
     a = ap.parse_args()
 
