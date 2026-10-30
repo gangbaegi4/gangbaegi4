@@ -230,6 +230,13 @@ def ass_time(t):
     return f"{int(h)}:{int(m):02d}:{s:05.2f}"
 
 
+def fit_size(text, size, max_w=960):
+    """한 줄이 화면 폭을 넘으면 글자 크기를 줄인다 (대략적인 글자 폭 추정)."""
+    w = sum(0.3 if ch == " " else 0.62 if ord(ch) < 128 else 0.95
+            for ch in text if ch not in INLINE) * size
+    return size if w <= max_w else int(size * max_w / w)
+
+
 def ass_text(text, base_color):
     text = text.replace("{", "（").replace("}", "）").replace("\n", r"\N")
     out, open_mark = [], None
@@ -294,13 +301,12 @@ def build_ass(plan, tl, path):
     y = plan.get("title_y", tpl["title_y"])
     for item in plan.get("title", []):
         style, base = TITLE_STYLE[item.get("style", "white")]
-        size = item.get("size")
+        size = fit_size(item["text"], item.get("size", 112 if style == "TitleG" else 118))
         a = tl.map(item["start"]) if "start" in item else 0
         b = tl.map(item["end"]) if "end" in item else tl.total
         iy = item.get("y", y)
-        fs = rf"\fs{size}" if size else ""
-        add(5, a, b, style, ass_text(item["text"], base), rf"\an5\pos(540,{iy}){fs}")
-        y = iy + (size or 118) + 24
+        add(5, a, b, style, ass_text(item["text"], base), rf"\an5\pos(540,{iy})\fs{size}")
+        y = iy + size + 24
 
     # 말 자막
     cy = plan.get("caption_y", tpl["caption_y"])
@@ -308,11 +314,12 @@ def build_ass(plan, tl, path):
         a, b = tl.map(c["start"]), tl.map(c["end"])
         st = c.get("style", "normal")
         if st == "red":
-            add(3, a, b, "CapRed", ass_text(c["text"], RED), rf"\an5\pos(540,{cy + 40})" + CAP_IN)
+            add(3, a, b, "CapRed", ass_text(c["text"], RED),
+                rf"\an5\pos(540,{cy + 40})\fs{fit_size(c['text'], 150)}" + CAP_IN)
         else:
             base = YELLOW if st == "yellow" else WHITE
             add(3, a, b, "Cap", ass_text(c["text"], base),
-                rf"\an5\pos(540,{cy})\c{base}" + CAP_IN)
+                rf"\an5\pos(540,{cy})\c{base}\fs{fit_size(c['text'], 92)}" + CAP_IN)
         if c.get("label"):
             lc = GREEN if c.get("label_color") == "green" else YELLOW
             ly = cy - (110 if st == "red" else 92)
@@ -321,7 +328,7 @@ def build_ass(plan, tl, path):
     # 팝업 강조 (??????, 절대 하지 마세요 등)
     for p in plan.get("popups", []):
         style, base = POP_STYLE[p.get("style", "red")]
-        size = rf"\fs{p['size']}" if p.get("size") else ""
+        size = rf"\fs{fit_size(p['text'], p.get('size', 140 if style == 'PopRed' else 130))}"
         add(6, tl.map(p["start"]), tl.map(p["end"]), style, ass_text(p["text"], base),
             rf"\an5\pos(540,{p.get('y', 700)}){size}" + POP_IN)
 
@@ -370,7 +377,10 @@ def render(plan, out, work):
     src = plan["source"]
     tpl = TEMPLATES[plan["template"]]
     vx, vy, vw, vh = tpl["video"]
-    cuts = plan["cuts"] or [[0, probe(src)[0]]]
+    # cuts 항목: [시작, 끝] 또는 [시작, 끝, {"crop_x": 0~1, "fit": true, "zoom": 1.0}]
+    raw = plan["cuts"] or [[0, probe(src)[0]]]
+    cuts = [(c[0], c[1]) for c in raw]
+    opts = [c[2] if len(c) > 2 else {} for c in raw]
     tl = Timeline(cuts)
     ass_p = os.path.join(work, "subs.ass")
     build_ass(plan, tl, ass_p)
@@ -378,12 +388,29 @@ def render(plan, out, work):
     inputs = ["-i", src]
     fc = []
     zoom = plan.get("zoom", "alternate")
+    top = plan.get("video_top", 0) if plan["template"] == "fullscreen" else 0
+    cy_ = plan.get("crop_y", 0.35)   # 줌으로 세로가 남을 때 자를 위치 (0=위 기준)
     for i, (s, e) in enumerate(cuts):
-        z = 1.12 if (zoom == "alternate" and i % 2 == 1) else 1.0
-        tw, th = int(vw * z) // 2 * 2, int(vh * z) // 2 * 2
-        fc.append(f"[0:v]trim=start={s}:end={e},setpts=PTS-STARTPTS,"
-                  f"scale={tw}:{th}:force_original_aspect_ratio=increase,"
-                  f"crop={vw}:{vh}:(iw-{vw})/2:(ih-{vh})*0.35,setsar=1,fps={FPS}[v{i}]")
+        o = opts[i]
+        z = o.get("zoom", 1.12 if (zoom == "alternate" and i % 2 == 1) else 1.0)
+        cx = o.get("crop_x", plan.get("crop_x", 0.5))   # 가로 영상에서 사람이 있는 위치
+        cut = f"[0:v]trim=start={s}:end={e},setpts=PTS-STARTPTS"
+        if o.get("fit"):
+            # 가로 화면 통째로 보여주기: 흐린 배경 위에 가로폭 맞춤
+            fw = int(vw * z) // 2 * 2
+            fc.append(f"{cut},split[fb{i}][ff{i}]")
+            fc.append(f"[fb{i}]scale={vw}:{vh}:force_original_aspect_ratio=increase,"
+                      f"crop={vw}:{vh},boxblur=30:2,eq=brightness=-0.12[fbb{i}]")
+            fc.append(f"[ff{i}]scale={fw}:-2,crop=min(iw\\,{vw}):ih:(iw-min(iw\\,{vw}))*{cx}[ffs{i}]")
+            fy = f"{top + 30}" if top else f"(H-h)/2-{o.get('lift', 0)}"
+            fc.append(f"[fbb{i}][ffs{i}]overlay=(W-w)/2:{fy},setsar=1,fps={FPS}[v{i}]")
+        else:
+            ah = vh - top   # video_top: 위쪽을 검은 띠로 비워 타이틀 자리를 만든다
+            tw, th = int(vw * z) // 2 * 2, int(ah * z) // 2 * 2
+            pad = f",pad={vw}:{vh}:0:{top}:black" if top else ""
+            fc.append(f"{cut},scale={tw}:{th}:force_original_aspect_ratio=increase,"
+                      f"crop={vw}:{ah}:max(0\\,min(iw-{vw}\\,iw*{cx}-{vw}/2)):(ih-{ah})*{cy_}"
+                      f"{pad},setsar=1,fps={FPS}[v{i}]")
         fc.append(f"[0:a]atrim=start={s}:end={e},asetpts=PTS-STARTPTS,"
                   f"afade=t=in:d=0.01,afade=t=out:st={max(0, e - s - 0.015):.3f}:d=0.015[a{i}]")
     fc.append("".join(f"[v{i}][a{i}]" for i in range(len(cuts))) +
