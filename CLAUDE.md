@@ -47,3 +47,7 @@
   - 시범(몸 전체가 보여야 하는 장면)만 `fit` 전체 화면으로 처리했다.
   - BGM은 `tools/make_bgm.py`로 합성했다 (`bgm_volume: 0.35`, 말할 때 자동으로 작아짐).
 - 영상 받는 방법: 사용자가 GitHub 릴리스(태그 `Video1`, `Video2`…)에 올린다. `get_release_by_tag`로 파일 주소를 확인하고 curl로 받는다.
+- 얼굴 모자이크: `python3 tools/face_mosaic.py 원본 -o 원본_mosaic.mp4` → plan의 `source`를 결과 파일로 바꾼 다음 렌더한다.
+  - 모델: `models/vittrack.onnx`, `models/face_yunet.onnx`, `models/mp/pose_estimation_mediapipe_2023mar.onnx` (opencv_zoo, media.githubusercontent.com에서 받음)
+  - 푸시업처럼 엎드린 자세에서는 추적이 엇나갈 수 있다. 반드시 머리 위치를 프레임으로 확인한다.
+  - 틀린 구간은 `_track.npy`를 고친 뒤 `--track`으로 다시 적용한다.
