@@ -438,6 +438,19 @@ def render(plan, out, work):
         fc.append(f"[c1][{fi}:v]overlay={vx - 8}:{vy - 8}:shortest=1[c2]")
         cur = "c2"
 
+    # 검은 타이틀 띠와 영상 사이 경계를 그라데이션으로 자연스럽게 이어 줌
+    if top and plan.get("top_fade", 0):
+        from PIL import Image
+        fade = plan["top_fade"]
+        os.makedirs(work, exist_ok=True)
+        fade_p = os.path.join(work, "top_fade.png")
+        img = Image.new("RGBA", (vw, fade))
+        img.putdata([(0, 0, 0, int(255 * (1 - y / fade) ** 1.6)) for y in range(fade) for _ in range(vw)])
+        img.save(fade_p)
+        inputs += ["-loop", "1", "-i", fade_p]
+        fc.append(f"[{cur}][{n_in}:v]overlay=0:{top}:shortest=1[tf]")
+        cur, n_in = "tf", n_in + 1
+
     # 이미지 오버레이 (아이콘, 리스트 카드 등)
     for j, im in enumerate(plan.get("images", [])):
         inputs += ["-loop", "1", "-i", im["file"]]

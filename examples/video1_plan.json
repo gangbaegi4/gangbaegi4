@@ -297,5 +297,6 @@
   "crop_x": 0.68,
   "video_top": 330,
   "crop_y": 0.0,
-  "caption_y": 1250
+  "caption_y": 1250,
+  "top_fade": 220
 }
