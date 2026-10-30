@@ -402,7 +402,7 @@ def render(plan, out, work):
             fc.append(f"[fb{i}]scale={vw}:{vh}:force_original_aspect_ratio=increase,"
                       f"crop={vw}:{vh},boxblur=30:2,eq=brightness=-0.12[fbb{i}]")
             fc.append(f"[ff{i}]scale={fw}:-2,crop=min(iw\\,{vw}):ih:(iw-min(iw\\,{vw}))*{cx}[ffs{i}]")
-            fy = f"{top + 30}" if top else f"(H-h)/2-{o.get('lift', 0)}"
+            fy = f"(H-h)/2-{o.get('lift', 0)}"   # 가로 화면은 세로 가운데에
             fc.append(f"[fbb{i}][ffs{i}]overlay=(W-w)/2:{fy},setsar=1,fps={FPS}[v{i}]")
         else:
             ah = vh - top   # video_top: 위쪽을 검은 띠로 비워 타이틀 자리를 만든다
@@ -448,7 +448,12 @@ def render(plan, out, work):
         img.putdata([(0, 0, 0, int(255 * (1 - y / fade) ** 1.6)) for y in range(fade) for _ in range(vw)])
         img.save(fade_p)
         inputs += ["-loop", "1", "-i", fade_p]
-        fc.append(f"[{cur}][{n_in}:v]overlay=0:{top}:shortest=1[tf]")
+        # 가로 화면(fit) 구간은 배경이 흐린 영상이라 그라데이션을 빼야 띠가 안 생긴다
+        fit_ranges = [(tl.segs[k][2], tl.segs[k][2] + cuts[k][1] - cuts[k][0])
+                      for k in range(len(cuts)) if opts[k].get("fit")]
+        off = "+".join(f"between(t,{a:.3f},{b:.3f})" for a, b in fit_ranges)
+        en = f":enable='not({off})'" if off else ""
+        fc.append(f"[{cur}][{n_in}:v]overlay=0:{top}:shortest=1{en}[tf]")
         cur, n_in = "tf", n_in + 1
 
     # 이미지 오버레이 (아이콘, 리스트 카드 등)
