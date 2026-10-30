@@ -454,8 +454,14 @@ def render(plan, out, work):
     # 오디오: 라우드니스 -14 LUFS, BGM 있으면 낮게 깔기
     if plan.get("bgm"):
         inputs += ["-stream_loop", "-1", "-i", plan["bgm"]]
-        fc.append(f"[{n_in}:a]volume={plan.get('bgm_volume', 0.12)}[bgm];"
-                  f"[ac][bgm]amix=inputs=2:duration=first:normalize=0[am]")
+        # 말할 때는 BGM이 자동으로 작아지게(사이드체인 더킹), 끝에서 페이드아웃
+        fo = max(0.0, tl.total - 1.5)
+        fc.append(f"[ac]asplit[vo][vk];[{n_in}:a]aformat=channel_layouts=stereo,"
+                  f"volume={plan.get('bgm_volume', 0.12)},atrim=duration={tl.total:.3f},"
+                  f"afade=t=out:st={fo:.3f}:d=1.5[bg0];"
+                  f"[vk]aformat=channel_layouts=stereo[key];"
+                  f"[bg0][key]sidechaincompress=threshold=0.03:ratio=4:attack=15:release=350[bgd];"
+                  f"[vo][bgd]amix=inputs=2:duration=first:normalize=0[am]")
         acur = "am"
     else:
         acur = "ac"
