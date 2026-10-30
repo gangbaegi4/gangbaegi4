@@ -39,3 +39,11 @@
 - 레퍼런스 영상 수치 측정: `python3 tools/analyze_style.py ref.mp4`
 
 `work/`, `out/`, `models/`는 커밋하지 않는다 (.gitignore).
+
+## 참고 예시
+- `examples/video1_plan.json`: 첫 편집(푸시업 영상)에서 사용자가 만족한 최종 plan.
+  - 가로 원본이다: `crop_x`로 사람 위치를 맞추고, `video_top: 450`으로 위쪽을 검은 타이틀 띠로 비웠다.
+  - 말하는 장면은 확대(1.0배)했다. 사용자가 시작 부분이 너무 확대됐다고 해서 1.12배 추가 확대는 뺐다.
+  - 시범(몸 전체가 보여야 하는 장면)만 `fit` 전체 화면으로 처리했다.
+  - BGM은 `tools/make_bgm.py`로 합성했다 (`bgm_volume: 0.35`, 말할 때 자동으로 작아짐).
+- 영상 받는 방법: 사용자가 GitHub 릴리스(태그 `Video1`, `Video2`…)에 올린다. `get_release_by_tag`로 파일 주소를 확인하고 curl로 받는다.
