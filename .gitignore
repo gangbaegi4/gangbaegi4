@@ -1,0 +1,6 @@
+models/
+assets/
+work/
+out/
+*_work/
+__pycache__/
