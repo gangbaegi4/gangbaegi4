@@ -292,7 +292,7 @@
   ],
   "broll": [],
   "images": [],
-  "bgm": "work/video1/bgm.wav",
+  "bgm": null,
   "bgm_volume": 0.5,
   "crop_x": 0.68,
   "video_top": 330,
