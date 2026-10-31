@@ -446,7 +446,11 @@ def render(plan, out, work):
         fc.append(f"[0:a]atrim=start={s}:end={e},asetpts=PTS-STARTPTS,"
                   f"afade=t=in:d=0.01,afade=t=out:st={max(0, e - s - 0.015):.3f}:d=0.015[a{i}]")
     fc.append("".join(f"[v{i}][a{i}]" for i in range(len(cuts))) +
-              f"concat=n={len(cuts)}:v=1:a=1[vc][ac]")
+              f"concat=n={len(cuts)}:v=1:a=1[vc][ac0]")
+    # 목소리: 저음 웅웅거림 제거 + 컴프레서로 작은 소리를 끌어올려 또렷하고 크게
+    voice_gain = plan.get("voice_gain_db", 0)
+    fc.append(f"[ac0]highpass=f=80,acompressor=threshold=-22dB:ratio=3.5:attack=8:release=120:"
+              f"makeup=4,volume={voice_gain}dB[ac]")
     cur, n_in = "vc", 1
 
     # B롤: 해당 구간 동안 영상 영역을 다른 클립으로 덮음 (소리는 원본 유지)
@@ -528,7 +532,8 @@ def render(plan, out, work):
     if sfx_in is not None:
         fc.append(f"[{acur}][{sfx_in}:a]amix=inputs=2:duration=first:normalize=0[ax]")
         acur = "ax"
-    fc.append(f"[{acur}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
+    lufs = plan.get("loudness", -14)   # 릴스는 -11 정도로 크게
+    fc.append(f"[{acur}]loudnorm=I={lufs}:TP=-1.0:LRA=9,aresample=48000[aout]")
 
     fc_path = os.path.join(work, "filter.txt")
     with open(fc_path, "w", encoding="utf-8") as f:
