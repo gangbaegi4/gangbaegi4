@@ -307,6 +307,6 @@
   "caption_y": 1250,
   "top_fade": 220,
   "sfx": true,
-  "loudness": -11,
-  "sfx_volume": 0.75
+  "loudness": -8.5,
+  "sfx_volume": 0.6
 }

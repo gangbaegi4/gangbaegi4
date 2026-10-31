@@ -533,7 +533,10 @@ def render(plan, out, work):
         fc.append(f"[{acur}][{sfx_in}:a]amix=inputs=2:duration=first:normalize=0[ax]")
         acur = "ax"
     lufs = plan.get("loudness", -14)   # 릴스는 -11 정도로 크게
-    fc.append(f"[{acur}]loudnorm=I={lufs}:TP=-1.0:LRA=9,aresample=48000[aout]")
+    # loudnorm만으로는 -10 LUFS 근처에서 더 안 커져서, 목표가 크면 리미터로 마저 끌어올린다
+    push = max(0.0, -10.5 - lufs)
+    fc.append(f"[{acur}]loudnorm=I={max(lufs, -10.5)}:TP=-1.5:LRA=9,aresample=48000,"
+              f"volume={push:.1f}dB,alimiter=limit=0.89:attack=2:release=60:level=false[aout]")
 
     fc_path = os.path.join(work, "filter.txt")
     with open(fc_path, "w", encoding="utf-8") as f:
@@ -543,7 +546,28 @@ def render(plan, out, work):
            "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-r", str(FPS),
            "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]
     subprocess.run(cmd, check=True)
+    if lufs > -10.5:
+        boost_loudness(out, lufs, work)
     print(f"완료: {out}  ({tl.total:.1f}초, 컷 {len(cuts)}개)")
+
+
+def measure_lufs(path):
+    log = subprocess.run(["ffmpeg", "-i", path, "-vn", "-af", "ebur128", "-f", "null", "-"],
+                         capture_output=True, text=True).stderr
+    return float(re.findall(r"I:\s+(-?[\d.]+) LUFS", log)[-1])
+
+
+def boost_loudness(out, target, work):
+    """2차 패스: 실제 음량을 재서 모자란 만큼 리미터로 끌어올린다 (영상은 그대로 복사)."""
+    tmp = os.path.join(work, "loud_tmp.mp4")
+    for _ in range(3):
+        gap = target - measure_lufs(out)
+        if gap < 0.3:
+            break
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", out, "-c:v", "copy",
+                        "-af", f"volume={gap + 0.3:.2f}dB,alimiter=limit=0.89:attack=2:release=60:level=false",
+                        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", tmp], check=True)
+        os.replace(tmp, out)
 
 
 # ---------------------------------------------------------------- CLI
