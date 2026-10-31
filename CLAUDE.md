@@ -45,7 +45,8 @@
   - 가로 원본이다: `crop_x`로 사람 위치를 맞추고, `video_top: 330`으로 위쪽을 검은 타이틀 띠로 비웠다. (450은 사람이 너무 아래에 있다고 해서 올림). 띠와 영상의 경계는 `top_fade: 220` 그라데이션으로 이었다.
   - 말하는 장면은 확대(1.0배)했다. 사용자가 시작 부분이 너무 확대됐다고 해서 1.12배 추가 확대는 뺐다.
   - 시범(몸 전체가 보여야 하는 장면)만 `fit` 전체 화면으로 처리했다.
-  - BGM은 `tools/make_bgm.py`로 합성했다 (`bgm_volume: 0.35`, 말할 때 자동으로 작아짐).
+  - BGM은 `tools/make_bgm.py`로 합성했다 (`bgm_volume: 0.5`, 말할 때 자동으로 작아짐).
+  - 효과음은 `"sfx": true`로 켠다 (`tools/make_sfx.py`로 합성). 빨강 자막은 쿵, 라벨·팝업은 뿅, 숫자는 띵, 화면이 바뀔 때는 휙.
 - 영상 받는 방법: 사용자가 GitHub 릴리스(태그 `Video1`, `Video2`…)에 올린다. `get_release_by_tag`로 파일 주소를 확인하고 curl로 받는다.
 - 얼굴 모자이크: `python3 tools/face_mosaic.py 원본 -o 원본_mosaic.mp4` → plan의 `source`를 결과 파일로 바꾼 다음 렌더한다.
   - 모델: `models/vittrack.onnx`, `models/face_yunet.onnx`, `models/mp/pose_estimation_mediapipe_2023mar.onnx` (opencv_zoo, media.githubusercontent.com에서 받음)

@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONTS = os.path.join(ROOT, "fonts")
 MODELS = os.path.join(ROOT, "models")
@@ -372,6 +373,37 @@ def ensure_card_assets():
     return bg_p, mask_p, frame_p
 
 
+def sfx_events(plan, tl, cuts, opts):
+    """자막 스타일·화면 전환에서 효과음 위치(편집 후 초)를 뽑는다."""
+    ev = [(0.0, "whoosh")]
+    for c in plan.get("captions", []):
+        t = tl.map(c["start"])
+        if c.get("style") == "red":
+            ev.append((t, "impact"))
+        elif c.get("label"):
+            ev.append((t, "pop"))
+        elif re.search(r"\*[^*]*\d", c["text"]):
+            ev.append((t, "ding"))
+    for p in plan.get("popups", []):
+        ev.append((tl.map(p["start"]), "pop" if p.get("style", "red") == "red" else "ding"))
+    for k in range(1, len(cuts)):   # 확대 화면 ↔ 가로 전체 화면이 바뀌는 순간
+        if bool(opts[k].get("fit")) != bool(opts[k - 1].get("fit")):
+            ev.append((tl.segs[k][2], "whoosh"))
+    if isinstance(plan.get("sfx"), list):
+        ev += [(tl.map(e["t"]), e["type"]) for e in plan["sfx"]]
+    # 너무 붙어 있으면 센 소리 하나만
+    rank = {"impact": 3, "whoosh": 2, "ding": 1, "pop": 0}
+    ev.sort()
+    out = []
+    for t, k in ev:
+        if out and t - out[-1][0] < 0.3:
+            if rank[k] > rank[out[-1][1]]:
+                out[-1] = (t, k)
+            continue
+        out.append((t, k))
+    return out
+
+
 def render(plan, out, work):
     os.makedirs(work, exist_ok=True)
     src = plan["source"]
@@ -470,6 +502,16 @@ def render(plan, out, work):
     fc.append(f"[{cur}]ass=filename='{ass_esc}':fontsdir='{fonts_esc}',format=yuv420p[vout]")
 
     # 오디오: 라우드니스 -14 LUFS, BGM 있으면 낮게 깔기
+    # 효과음: 강조 순간에 자동으로 (plan["sfx"]가 true면 자동, 리스트면 [{"t": 원본초, "type": ...}] 추가)
+    sfx_in = None
+    if plan.get("sfx"):
+        import make_sfx
+        ev = sfx_events(plan, tl, cuts, opts)
+        sfx_p = os.path.join(work, "sfx.wav")
+        make_sfx.build_track(ev, tl.total, sfx_p, plan.get("sfx_volume", 1.0))
+        inputs += ["-i", sfx_p]
+        sfx_in, n_in = n_in, n_in + 1
+
     if plan.get("bgm"):
         inputs += ["-stream_loop", "-1", "-i", plan["bgm"]]
         # 말할 때는 BGM이 자동으로 작아지게(사이드체인 더킹), 끝에서 페이드아웃
@@ -478,11 +520,14 @@ def render(plan, out, work):
                   f"volume={plan.get('bgm_volume', 0.12)},atrim=duration={tl.total:.3f},"
                   f"afade=t=out:st={fo:.3f}:d=1.5[bg0];"
                   f"[vk]aformat=channel_layouts=stereo[key];"
-                  f"[bg0][key]sidechaincompress=threshold=0.03:ratio=4:attack=15:release=350[bgd];"
+                  f"[bg0][key]sidechaincompress=threshold=0.05:ratio=3:attack=20:release=400[bgd];"
                   f"[vo][bgd]amix=inputs=2:duration=first:normalize=0[am]")
         acur = "am"
     else:
         acur = "ac"
+    if sfx_in is not None:
+        fc.append(f"[{acur}][{sfx_in}:a]amix=inputs=2:duration=first:normalize=0[ax]")
+        acur = "ax"
     fc.append(f"[{acur}]loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000[aout]")
 
     fc_path = os.path.join(work, "filter.txt")

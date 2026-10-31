@@ -293,10 +293,11 @@
   "broll": [],
   "images": [],
   "bgm": "work/video1/bgm.wav",
-  "bgm_volume": 0.35,
+  "bgm_volume": 0.5,
   "crop_x": 0.68,
   "video_top": 330,
   "crop_y": 0.0,
   "caption_y": 1250,
-  "top_fade": 220
+  "top_fade": 220,
+  "sfx": true
 }

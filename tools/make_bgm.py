@@ -3,6 +3,7 @@
 
 사용법: python3 tools/make_bgm.py -o bgm.wav --seconds 45 --bpm 118
 구성: 킥(4박) + 클랩(2·4박) + 하이햇(엇박) + 베이스 + 부드러운 패드 코드 (Am-F-C-G)
+      + 3마디째부터 플럭 아르페지오
 """
 import argparse
 import wave
@@ -61,6 +62,7 @@ def make(seconds, bpm, seed=3):
     drums = np.zeros(total)
     bass = np.zeros(total)
     pad = np.zeros(total)
+    lead = np.zeros(total)
 
     chords = [(57, 60, 64), (53, 57, 60), (48, 52, 55), (55, 59, 62)]  # Am F C G
     roots = [33, 29, 36, 31]
@@ -87,6 +89,15 @@ def make(seconds, bpm, seed=3):
         for k in range(2):
             n = int(beat / 2 * SR * 0.9)
             put(bass, lowpass(saw(r, n, 0.002), 400) * env(n, 0.005, 0.15), t0 + k * beat / 2, 0.55)
+        # 플럭 아르페지오: 8분음표로 코드 구성음을 한 옥타브 위에서 (멜로디감)
+        if bar >= 2:   # 처음 2마디는 비워 두고 들어오면서 분위기를 올린다
+            pattern = [0, 1, 2, 1]
+            for k in range(2):
+                m = chords[bar % 4][pattern[(b % 4 * 2 + k) % 4]] + 12
+                n = int(beat / 2 * SR)
+                tt = np.arange(n) / SR
+                tone = np.sin(2 * np.pi * note(m) * tt) + 0.3 * np.sin(4 * np.pi * note(m) * tt)
+                put(lead, tone * env(n, 0.002, 0.12), t0 + k * beat / 2, 0.16)
         # 패드: 마디 시작마다 코드
         if b % 4 == 0:
             n = int(4 * beat * SR)
@@ -101,7 +112,7 @@ def make(seconds, bpm, seed=3):
         k = min(total - s, int(beat * SR))
         if k > 0:
             pump[s:s + k] = 0.45 + 0.55 * np.minimum(1, np.arange(k) / (beat * SR * 0.6))
-    mix = drums + bass + pad * pump
+    mix = drums + bass + pad * pump + lead
     mix = mix[:int(seconds * SR)]
     fade = int(1.5 * SR)
     mix[-fade:] *= np.linspace(1, 0, fade)
